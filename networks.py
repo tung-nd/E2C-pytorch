@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from normal import NormalDistribution
 
+torch.set_default_dtype(torch.float64)
+
 class Encoder(nn.Module):
     def __init__(self, net, obs_dim, z_dim):
         super(Encoder, self).__init__()
@@ -31,24 +33,18 @@ class Decoder(nn.Module):
         return self.net(z)
 
 class Transition(nn.Module):
-    def __init__(self, net, z_dim, u_dim, pertubations = False):
+    def __init__(self, net, z_dim, u_dim):
         super(Transition, self).__init__()
         self.net = net  # network to output the last layer before predicting A_t, B_t and o_t
         self.h_dim = self.net[-3].out_features
         self.z_dim = z_dim
         self.u_dim = u_dim
-        self.pertubations = pertubations
 
-        if not pertubations:
-            self.fc_A = nn.Sequential(
-                nn.Linear(self.h_dim, self.z_dim * self.z_dim),
-                nn.Sigmoid()
-            )
-        else:
-            self.fc_A = nn.Sequential(
-                nn.Linear(self.h_dim, self.z_dim * 2), # v_t and r_t
-                nn.Sigmoid()
-            )
+        self.fc_A = nn.Sequential(
+            nn.Linear(self.h_dim, self.z_dim * 2), # v_t and r_t
+            nn.Sigmoid()
+        )
+
         self.fc_B = nn.Linear(self.h_dim, self.z_dim * self.u_dim)
         self.fc_o = nn.Linear(self.h_dim, self.z_dim)
 
@@ -62,24 +58,19 @@ class Transition(nn.Module):
         h_t = self.net(z_bar_t)
         B_t = self.fc_B(h_t)
         o_t = self.fc_o(h_t)
-        if not self.pertubations:
-            A_t = self.fc_A(h_t)
-            A_t = A_t.view(-1, self.z_dim, self.z_dim)
-        else:
-            v_t, r_t = self.fc_A(h_t).chunk(2, dim=1)
-            v_t = torch.unsqueeze(v_t, dim=-1)
-            r_t = torch.unsqueeze(r_t, dim=-2)
-            A_t = torch.eye(self.z_dim).cuda() + torch.bmm(v_t, r_t)
+
+        v_t, r_t = self.fc_A(h_t).chunk(2, dim=1)
+        v_t = torch.unsqueeze(v_t, dim=-1)
+        r_t = torch.unsqueeze(r_t, dim=-2)
+        A_t = torch.eye(self.z_dim).repeat(z_bar_t.size(0), 1, 1) + torch.bmm(v_t, r_t)
 
         B_t = B_t.view(-1, self.z_dim, self.u_dim)
 
         mu_t = q_z_t.mean
-        sigma_t = q_z_t.cov
 
         mean = A_t.bmm(mu_t.unsqueeze(-1)).squeeze(-1) + B_t.bmm(u_t.unsqueeze(-1)).squeeze(-1) + o_t
-        cov = A_t.bmm(sigma_t.bmm(A_t.transpose(1, 2)))
 
-        return NormalDistribution(mean, cov)
+        return mean, NormalDistribution(mean, logvar=q_z_t.logvar, v=v_t.squeeze(), r=r_t.squeeze(), A=A_t)
 
 class PlanarEncoder(Encoder):
     def __init__(self, obs_dim = 1600, z_dim = 2):
@@ -117,7 +108,7 @@ class PlanarDecoder(Decoder):
         super(PlanarDecoder, self).__init__(net, z_dim, obs_dim)
 
 class PlanarTransition(Transition):
-    def __init__(self, z_dim = 2, u_dim = 2, pertubations = False):
+    def __init__(self, z_dim = 2, u_dim = 2):
         net = nn.Sequential(
             nn.Linear(z_dim, 100),
             nn.BatchNorm1d(100),
@@ -127,7 +118,7 @@ class PlanarTransition(Transition):
             nn.BatchNorm1d(100),
             nn.ReLU()
         )
-        super(PlanarTransition, self).__init__(net, z_dim, u_dim, pertubations)
+        super(PlanarTransition, self).__init__(net, z_dim, u_dim)
 
 
 CONFIG = {
@@ -150,8 +141,13 @@ __all__ = ['load_config']
 # x_recon = dec(mean)
 # # print (x_recon.size())
 #
-# q_z_t = NormalDistribution(mean, torch.diag_embed(logvar.exp()))
+# q_z_t = NormalDistribution(mean, logvar)
+# print (q_z_t.mean.size())
+# print (q_z_t.cov.size())
 # u_t = torch.randn(size=(10, 2))
 # z_t_1 = trans(mean, q_z_t, u_t)
-# print (z_t_1.cov[0])
-
+# print (z_t_1[1].mean.size())
+# print (z_t_1[1].cov.size())
+#
+# kl = NormalDistribution.KL_divergence(z_t_1[1], q_z_t)
+# print (kl)
