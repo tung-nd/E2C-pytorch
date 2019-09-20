@@ -48,7 +48,7 @@ class Transition(nn.Module):
         self.fc_B = nn.Linear(self.h_dim, self.z_dim * self.u_dim)
         self.fc_o = nn.Linear(self.h_dim, self.z_dim)
 
-    def forward(self, z_bar_t, q_z_t, u_t): # Q_z_t is the distribution of z_bar_t
+    def forward(self, z_bar_t, q_z_t, u_t):
         """
         :param z_bar_t: the reference point
         :param Q_z_t: the distribution q(z|x)
@@ -62,7 +62,7 @@ class Transition(nn.Module):
         v_t, r_t = self.fc_A(h_t).chunk(2, dim=1)
         v_t = torch.unsqueeze(v_t, dim=-1)
         r_t = torch.unsqueeze(r_t, dim=-2)
-        A_t = torch.eye(self.z_dim).repeat(z_bar_t.size(0), 1, 1) + torch.bmm(v_t, r_t)
+        A_t = torch.eye(self.z_dim).repeat(z_bar_t.size(0), 1, 1).cuda() + torch.bmm(v_t, r_t)
 
         B_t = B_t.view(-1, self.z_dim, self.u_dim)
 
@@ -120,21 +120,64 @@ class PlanarTransition(Transition):
         )
         super(PlanarTransition, self).__init__(net, z_dim, u_dim)
 
+class PendulumEncoder(Encoder):
+    def __init__(self, obs_dim = 4608, z_dim = 3):
+        net = nn.Sequential(
+            nn.Linear(obs_dim, 800),
+            nn.BatchNorm1d(800),
+            nn.ReLU(),
+
+            nn.Linear(800, 800),
+            nn.BatchNorm1d(800),
+            nn.ReLU(),
+
+            nn.Linear(800, z_dim * 2)
+        )
+        super(PendulumEncoder, self).__init__(net, obs_dim, z_dim)
+
+class PendulumDecoder(Decoder):
+    def __init__(self, z_dim = 3, obs_dim = 4608):
+        net = nn.Sequential(
+            nn.Linear(z_dim, 800),
+            nn.BatchNorm1d(800),
+            nn.ReLU(),
+
+            nn.Linear(800, 800),
+            nn.BatchNorm1d(800),
+            nn.ReLU(),
+
+            nn.Linear(800, obs_dim)
+        )
+        super(PendulumDecoder, self).__init__(net, z_dim, obs_dim)
+
+class PendulumTransition(Transition):
+    def __init__(self, z_dim = 3, u_dim = 1):
+        net = nn.Sequential(
+            nn.Linear(z_dim, 100),
+            nn.BatchNorm1d(100),
+            nn.ReLU(),
+
+            nn.Linear(100, 100),
+            nn.BatchNorm1d(100),
+            nn.ReLU()
+        )
+        super(PendulumTransition, self).__init__(net, z_dim, u_dim)
 
 CONFIG = {
-    'planar': (PlanarEncoder, PlanarDecoder, PlanarTransition)
+    'planar': (PlanarEncoder, PlanarDecoder, PlanarTransition),
+    'pendulum': (PendulumEncoder, PendulumDecoder, PendulumTransition)
 }
 
 def load_config(name):
-    return CONFIG['name']
+    return CONFIG[name]
 
 __all__ = ['load_config']
 
-# enc = PlanarEncoder()
-# dec = PlanarDecoder()
-# trans = PlanarTransition()
+# enc = PendulumEncoder()
+# dec = PendulumDecoder()
+# trans = PendulumTransition()
 #
-# x = torch.randn(size=(10, 1600))
+# x = torch.randn(size=(10, 4608))
 # # print (x.size())
 # mean, logvar = enc(x)
 # # print (logvar.size())
@@ -144,7 +187,7 @@ __all__ = ['load_config']
 # q_z_t = NormalDistribution(mean, logvar)
 # print (q_z_t.mean.size())
 # print (q_z_t.cov.size())
-# u_t = torch.randn(size=(10, 2))
+# u_t = torch.randn(size=(10, 1))
 # z_t_1 = trans(mean, q_z_t, u_t)
 # print (z_t_1[1].mean.size())
 # print (z_t_1[1].cov.size())

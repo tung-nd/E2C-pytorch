@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 
 from normal import *
@@ -11,9 +10,13 @@ class E2C(nn.Module):
         super(E2C, self).__init__()
         enc, dec, trans = load_config(env)
 
+        self.obs_dim = obs_dim
+        self.z_dim = z_dim
+        self.u_dim = u_dim
+
         self.encoder = enc(obs_dim=obs_dim, z_dim=z_dim)
         self.decoder = dec(z_dim=z_dim, obs_dim=obs_dim)
-        self.transition = trans(z_dim=z_dim, u_dim=u_dim)
+        self.trans = trans(z_dim=z_dim, u_dim=u_dim)
 
     def encode(self, x):
         """
@@ -36,7 +39,7 @@ class E2C(nn.Module):
         :param u:
         :return: samples z_hat_next and Q(z_hat_next)
         """
-        return self.transition(z_bar, q_z, u)
+        return self.trans(z_bar, q_z, u)
 
     def reparam(self, mean, logvar):
         sigma = (logvar / 2).exp()

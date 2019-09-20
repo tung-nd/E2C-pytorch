@@ -7,16 +7,9 @@ import gym
 import json
 from datetime import datetime
 import argparse
-from PIL import Image
 
-def _render_state_fully_observed(env, state):
-    # need two observations to restore the Markov property
-    before1 = state
-    before2 = env.step_from_state(state, np.array([0]))
-    return map(env.render_state, (before1[0], before2[0]))
-
-def sample_pendulum(sample_size, output_dir='data/pendulum', step_size=1, apply_control=True, num_shards=10):
-    env = gym.make('Pendulum-v0').env
+def sample_cartpole(sample_size, output_dir='data/cartpole', step_size=5, apply_control=True, num_shards=10):
+    env = gym.make('CartPole-v0').env
     assert sample_size % num_shards == 0
 
     samples = []
@@ -24,37 +17,31 @@ def sample_pendulum(sample_size, output_dir='data/pendulum', step_size=1, apply_
     if not path.exists(output_dir):
         os.makedirs(output_dir)
 
+    state = env.reset()
     for i in trange(sample_size):
         """
         for each sample:
-        - draw a random state (theta, theta dot)
-        - render x_t (including 2 images)
+        - draw a random state
+        - render x_t
         - draw a random action u_t and apply
         - render x_t+1 after applying u_t
         """
-        # th (theta) and thdot (theta dot) represent a state in Pendulum env
-        th = np.random.uniform(0, np.pi * 2)
-        thdot = np.random.uniform(-8, 8)
+        # state = env.reset()
 
-        state = np.array([th, thdot])
-
-        initial_state = np.copy(state)
-        before1, before2 = _render_state_fully_observed(env, state)
+        initial_state = state
+        before = env.render(mode = 'rgb_array')
 
         # apply the same control over a few timesteps
         if apply_control:
-            u = np.random.uniform(-2, 2, size=(1,))
+            u = env.action_space.sample()
         else:
             u = np.zeros((1,))
 
         for _ in range(step_size):
-            state = env.step_from_state(state, u)
+            state, reward, done, info = env.step(u)
 
-        after_state = np.copy(state)
-        after1, after2 = _render_state_fully_observed(env, state)
-
-        before = np.hstack((before1, before2))
-        after = np.hstack((after1, after2))
+        after_state = state
+        after = env.render(mode = 'rgb_array')
 
         shard_no = i // (sample_size // num_shards)
 
@@ -74,7 +61,7 @@ def sample_pendulum(sample_size, output_dir='data/pendulum', step_size=1, apply_
             'after_state': after_state.tolist(),
             'before': before_file,
             'after': after_file,
-            'control': u.tolist(),
+            'control': [u],
         })
 
     with open(path.join(output_dir, 'data.json'), 'wt') as outfile:
@@ -95,7 +82,7 @@ def sample_pendulum(sample_size, output_dir='data/pendulum', step_size=1, apply_
 def main(args):
     sample_size = args.sample_size
 
-    sample_pendulum(sample_size=sample_size)
+    sample_cartpole(sample_size=sample_size)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='sample data')
