@@ -15,8 +15,11 @@ class E2C(nn.Module):
         self.u_dim = u_dim
 
         self.encoder = enc(obs_dim=obs_dim, z_dim=z_dim)
+        # self.encoder.apply(init_weights)
         self.decoder = dec(z_dim=z_dim, obs_dim=obs_dim)
+        # self.decoder.apply(init_weights)
         self.trans = trans(z_dim=z_dim, u_dim=u_dim)
+        # self.trans.apply(init_weights)
 
     def encode(self, x):
         """
@@ -57,17 +60,17 @@ class E2C(nn.Module):
 
         x_next_pred = self.decode(z_next)
 
-        return x_recon, x_next_pred, q_z, q_z_next_pred
+        mu_next, logvar_next = self.encode(x_next)
+        q_z_next = NormalDistribution(mean=mu_next, logvar=logvar_next)
 
-def compute_loss(x, x_next, q_z_next, x_recon, x_next_pred, q_z, q_z_next_pred):
-    # lower-bound loss
-    recon_term = -torch.mean(torch.sum(x * torch.log(1e-5 + x_recon) + (1 - x) * torch.log(1e-5 + 1 - x_recon), dim=1))
-    pred_loss = -torch.mean(torch.sum(x_next * torch.log(1e-5 + x_next_pred) + (1 - x_next) * torch.log(1e-5 + 1 - x_next_pred), dim=1))
+        return x_recon, x_next_pred, q_z, q_z_next_pred, q_z_next
 
-    kl_term = - 0.5 * torch.mean(torch.sum(1 + q_z.logvar - q_z.mean.pow(2) - q_z.logvar.exp(), dim = 1))
+    def predict(self, x, u):
+        mu, logvar = self.encoder(x)
+        z = self.reparam(mu, logvar)
+        q_z = NormalDistribution(mu, logvar)
 
-    lower_bound = recon_term + pred_loss + kl_term
+        z_next, q_z_next_pred = self.transition(z, q_z, u)
 
-    # consistency loss
-    consis_term = NormalDistribution.KL_divergence(q_z_next_pred, q_z_next)
-    return lower_bound + consis_term
+        x_next_pred = self.decode(z_next)
+        return x_next_pred

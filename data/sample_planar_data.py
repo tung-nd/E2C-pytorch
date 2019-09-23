@@ -13,7 +13,8 @@ u_dim = 2 # control (action) dimension
 width, height = 40, 40
 x_dim = width*height
 rw = 1 # robot half-width
-env_file = './env.npy'
+max_dist = 2
+env_file = '/home/tungnd/Desktop/E2C/data/env.npy'
 env = np.load(env_file)
 
 def is_colliding(p):
@@ -21,18 +22,79 @@ def is_colliding(p):
     :param p: the coordinate (x, y) of the agent center
     :return: if agent body overlap with obstacle field
     """
-    if np.any([p - rw < 0, p + rw >= height]):  # check if the agent body is out of the plane, w = h
+    if np.any([p - rw < 0, p + rw >= height]):  # check if the agent body is out of the plane
         return True
 
     return np.mean(env[p[0] - rw:p[0] + rw + 1, p[1] - rw:p[1] + rw + 1]) > 0.05
 
-def getXp(p):
+def render(p):
     # return image X given true state p (position) of robot
     x = np.copy(env)
     x[p[0] - rw:p[0] + rw + 1, p[1] - rw:p[1] + rw + 1] = 1.  # robot is white on black background
     return x
 
-def sample_planar(sample_size, output_dir = './data/planar', max_dist=2):
+def sample_for_eval(num_eval):
+    samples = []
+
+    for i in range(num_eval):
+        while True:
+            row = randint(0 + rw, height - rw)
+            col = randint(0 + rw, width - rw)
+            if not is_colliding(np.array([row, col])):
+                break
+
+        state = np.array([row, col])
+
+        before = render(state)
+
+        # sample action
+        u = np.array([0, 0])
+        # row direction
+        d = randint(-1, 2)  # direction
+        nsteps = randint(max_dist + 1)  # step length
+        for _ in range(nsteps):
+            state[0] += d
+            u[0] += d
+            if is_colliding(state):
+                state[0] -= d
+                u[0] -= d
+                break
+
+        # column direction
+        d = randint(-1, 2)
+        nsteps = randint(max_dist + 1)
+        for _ in range(nsteps):
+            state[1] += d
+            u[1] += d
+            if is_colliding(state):
+                state[1] -= d
+                u[1] -= d
+                break
+
+        # apply control
+        after = render(state)
+        samples.append((before, u, after))
+    return samples
+
+def sample_traj(len_traj = 5):
+    # initial state
+    while True:
+        row = randint(0 + rw, height - rw)
+        col = randint(0 + rw, width - rw)
+        if not is_colliding(np.array([row, col])):
+            break
+    states = [np.array([row, col])]
+    actions = []
+    for i in range(1, len_traj + 1):
+        dr = randint(-1, 2) * randint(max_dist + 1)
+        dc = randint(-1, 2) * randint(max_dist + 1)
+        u = np.array([dr, dc])
+        next_state = states[i-1] + u
+        states.append(next_state)
+        actions.append(u)
+    return states, actions
+
+def sample_planar(sample_size, output_dir = './data/planar'):
     """
     :param sample_size:
     :param output_dir:
@@ -62,7 +124,7 @@ def sample_planar(sample_size, output_dir = './data/planar', max_dist=2):
         state = np.array([row, col])
 
         initial_state = np.copy(state)
-        before = getXp(initial_state)
+        before = render(initial_state)
 
         # sample action
         u = np.array([0, 0])
@@ -90,7 +152,7 @@ def sample_planar(sample_size, output_dir = './data/planar', max_dist=2):
 
         # apply control
         after_state = state
-        after = getXp(after_state)
+        after = render(after_state)
 
         before_file = 'before-{:05d}.png'.format(i)
         Image.fromarray(before * 255.).convert('L').save(path.join(output_dir, before_file))

@@ -9,14 +9,16 @@ from datetime import datetime
 import argparse
 from PIL import Image
 
-def _render_state_fully_observed(env, state):
+env = gym.make('Pendulum-v0').env
+width, height = 48 * 2, 48
+
+def render(state):
     # need two observations to restore the Markov property
     before1 = state
     before2 = env.step_from_state(state, np.array([0]))
     return map(env.render_state, (before1[0], before2[0]))
 
 def sample_pendulum(sample_size, output_dir='data/pendulum', step_size=1, apply_control=True, num_shards=10):
-    env = gym.make('Pendulum-v0').env
     assert sample_size % num_shards == 0
 
     samples = []
@@ -39,7 +41,7 @@ def sample_pendulum(sample_size, output_dir='data/pendulum', step_size=1, apply_
         state = np.array([th, thdot])
 
         initial_state = np.copy(state)
-        before1, before2 = _render_state_fully_observed(env, state)
+        before1, before2 = render(state)
 
         # apply the same control over a few timesteps
         if apply_control:
@@ -51,7 +53,7 @@ def sample_pendulum(sample_size, output_dir='data/pendulum', step_size=1, apply_
             state = env.step_from_state(state, u)
 
         after_state = np.copy(state)
-        after1, after2 = _render_state_fully_observed(env, state)
+        after1, after2 = render(state)
 
         before = np.hstack((before1, before2))
         after = np.hstack((after1, after2))

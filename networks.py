@@ -4,10 +4,23 @@ from normal import NormalDistribution
 
 torch.set_default_dtype(torch.float64)
 
+# def is_layer(m):
+#     return isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d)
+#
+# def initialize(seq):
+#     for m in seq:
+#         if is_layer(m):
+#             torch.nn.init.orthogonal_(m.weight)
+
+def weights_init(m):
+    if type(m) in [nn.Conv2d, nn.Linear, nn.ConvTranspose2d]:
+        torch.nn.init.orthogonal_(m.weight)
+
 class Encoder(nn.Module):
     def __init__(self, net, obs_dim, z_dim):
         super(Encoder, self).__init__()
         self.net = net
+        self.net.apply(weights_init)
         self.img_dim = obs_dim
         self.z_dim = z_dim
 
@@ -22,6 +35,7 @@ class Decoder(nn.Module):
     def __init__(self, net, z_dim, obs_dim):
         super(Decoder, self).__init__()
         self.net = net
+        self.net.apply(weights_init)
         self.z_dim = z_dim
         self.obs_dim = obs_dim
 
@@ -36,6 +50,7 @@ class Transition(nn.Module):
     def __init__(self, net, z_dim, u_dim):
         super(Transition, self).__init__()
         self.net = net  # network to output the last layer before predicting A_t, B_t and o_t
+        self.net.apply(weights_init)
         self.h_dim = self.net[-3].out_features
         self.z_dim = z_dim
         self.u_dim = u_dim
@@ -44,9 +59,12 @@ class Transition(nn.Module):
             nn.Linear(self.h_dim, self.z_dim * 2), # v_t and r_t
             nn.Sigmoid()
         )
+        self.fc_A.apply(weights_init)
 
         self.fc_B = nn.Linear(self.h_dim, self.z_dim * self.u_dim)
+        torch.nn.init.orthogonal_(self.fc_B.weight)
         self.fc_o = nn.Linear(self.h_dim, self.z_dim)
+        torch.nn.init.orthogonal_(self.fc_o.weight)
 
     def forward(self, z_bar_t, q_z_t, u_t):
         """
@@ -62,6 +80,7 @@ class Transition(nn.Module):
         v_t, r_t = self.fc_A(h_t).chunk(2, dim=1)
         v_t = torch.unsqueeze(v_t, dim=-1)
         r_t = torch.unsqueeze(r_t, dim=-2)
+
         A_t = torch.eye(self.z_dim).repeat(z_bar_t.size(0), 1, 1).cuda() + torch.bmm(v_t, r_t)
 
         B_t = B_t.view(-1, self.z_dim, self.u_dim)

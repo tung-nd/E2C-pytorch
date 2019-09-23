@@ -33,7 +33,7 @@ class NormalDistribution:
         :return: KL divergence between two distributions
         """
         mu_0 = q_z_next_pred.mean
-        mu_1 = q_z_next_pred.mean
+        mu_1 = q_z_next.mean
         sigma_0 = torch.exp(q_z_next_pred.logvar)
         sigma_1 = torch.exp(q_z_next.logvar)
         v = q_z_next_pred.v
