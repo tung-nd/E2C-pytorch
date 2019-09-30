@@ -6,7 +6,7 @@ from networks import *
 torch.set_default_dtype(torch.float64)
 
 class E2C(nn.Module):
-    def __init__(self, obs_dim, z_dim, u_dim, env = 'planar'):
+    def __init__(self, obs_dim, z_dim, u_dim, env = 'planar2'):
         super(E2C, self).__init__()
         enc, dec, trans = load_config(env)
 

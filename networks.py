@@ -183,7 +183,9 @@ class PendulumTransition(Transition):
         super(PendulumTransition, self).__init__(net, z_dim, u_dim)
 
 CONFIG = {
+    'planar2': (PlanarEncoder, PlanarDecoder, PlanarTransition),
     'planar': (PlanarEncoder, PlanarDecoder, PlanarTransition),
+    'planar_partial': (PlanarEncoder, PlanarDecoder, PlanarTransition),
     'pendulum': (PendulumEncoder, PendulumDecoder, PendulumTransition)
 }
 

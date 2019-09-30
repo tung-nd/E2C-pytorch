@@ -7,7 +7,6 @@ import gym
 import json
 from datetime import datetime
 import argparse
-from PIL import Image
 
 env = gym.make('Pendulum-v0').env
 width, height = 48 * 2, 48

@@ -1,30 +1,28 @@
-import torch
-import torchvision
 from tensorboardX import SummaryWriter
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.utils.data import random_split
-import numpy as np
 import matplotlib.pyplot as plt
 import argparse
+import sys
 
 from normal import *
 from e2c_model import E2C
 from datasets import *
 import data.sample_planar_data as planar_sampler
+import data.sample_planar_data_2 as planar_sampler_2
+import data.sample_planar_partial as planar_sampler_partial
 import data.sample_pendulum_data as pendulum_sampler
 import data.sample_cartpole_data as cartpole_sampler
 
-np.random.seed(0)
-torch.manual_seed(0)
 torch.set_default_dtype(torch.float64)
 
 device = torch.device("cuda")
-datasets = {'planar': PlanarDataset, 'pendulum': GymPendulumDatasetV2}
-settings = {'planar': (1600, 2, 2), 'pendulum': (4608, 3, 1)}
-samplers = {'planar': planar_sampler, 'pendulum': pendulum_sampler, 'cartpole': cartpole_sampler}
-num_eval = 5 # number of images evaluated on tensorboard
+datasets = {'planar': PlanarDataset, 'pendulum': GymPendulumDatasetV2, 'planar2': PlanarDataset, 'planar_partial': PlanarDataset}
+settings = {'planar': (1600, 2, 2), 'planar2': (1600, 2, 2), 'planar_partial': (1600, 2, 2), 'pendulum': (4608, 3, 1)}
+samplers = {'planar': planar_sampler, 'pendulum': pendulum_sampler, 'cartpole': cartpole_sampler, 'planar2': planar_sampler_2, 'planar_partial': planar_sampler_partial}
+num_eval = 10 # number of images evaluated on tensorboard
 
+# dataset = datasets['planar2']('./data/data/' + 'planar2')
 # x, u, x_next = dataset[0]
 # imgplot = plt.imshow(x.squeeze(), cmap='gray')
 # plt.show()
@@ -96,7 +94,7 @@ def evaluate(model, test_loader):
 def predict_x_next(model, env, num_eval):
     # frist sample a true trajectory from the environment
     sampler = samplers[env]
-    sampled_data = sampler.sample_for_eval(num_eval)
+    state_samples, sampled_data = sampler.sample(num_eval)
 
     # use the trained model to predict the next observation
     predicted = []
@@ -115,6 +113,7 @@ def plot_preds(model, env, num_eval):
 
     # plot the predicted and true observations
     fig, axes =plt.subplots(nrows=2, ncols=num_eval)
+    plt.setp(axes, xticks=[], yticks=[])
     pad = 5
     axes[0, 0].annotate('True observations', xy=(0, 0.5), xytext=(-axes[0,0].yaxis.labelpad - pad, 0),
                    xycoords=axes[0,0].yaxis.label, textcoords='offset points',
@@ -131,13 +130,19 @@ def plot_preds(model, env, num_eval):
 
 def main(args):
     env_name = args.env
-    assert env_name in ['planar', 'pendulum']
+    assert env_name in ['planar', 'planar2', 'planar_partial', 'pendulum']
     propor = args.propor
     batch_size = args.batch_size
     lr = args.lr
+    weight_decay = args.decay
     lam = args.lam
     epoches = args.num_iter
     iter_save = args.iter_save
+    log_dir = args.log_dir
+    seed = args.seed
+
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
     dataset = datasets[env_name]('./data/data/' + env_name)
     train_set, test_set = dataset[:int(len(dataset) * propor)], dataset[int(len(dataset) * propor):]
@@ -147,9 +152,15 @@ def main(args):
     obs_dim, z_dim, u_dim = settings[env_name]
     model = E2C(obs_dim=obs_dim, z_dim=z_dim, u_dim=u_dim, env=env_name).to(device)
 
-    optimizer = optim.Adam(model.parameters(), betas=(0.9, 0.9), eps=1e-8, lr=lr)
+    optimizer = optim.Adam(model.parameters(), betas=(0.9, 0.999), eps=1e-8, lr=lr, weight_decay=weight_decay)
 
-    writer = SummaryWriter('logs/planar')
+    writer = SummaryWriter('logs/' + env_name + '/' + log_dir)
+
+    result_path = './result/' + env_name + '/' + log_dir
+    if not path.exists(result_path):
+        os.makedirs(result_path)
+    with open(result_path + '/settings', 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
 
     for i in range(epoches):
         avg_loss = train(model, train_loader, lam, optimizer)
@@ -168,14 +179,12 @@ def main(args):
         # save model
         if (i + 1) % iter_save == 0:
             writer.add_figure('actual vs. predicted observations',
-                              plot_preds(model, env_name, 5),
+                              plot_preds(model, env_name, num_eval),
                               global_step=i)
             print('Saving the model.............')
-            # torch.save(model, './model_planar_' + str(i + 1))
-            if not path.exists('./result/' + env_name):
-                os.makedirs('./result/' + env_name)
-            torch.save(model.state_dict(), './result/' + env_name + '/model_' + str(i + 1))
-            with open('./result/' + env_name + '/loss_' + str(i + 1), 'w') as f:
+
+            torch.save(model.state_dict(), result_path + '/model_' + str(i + 1))
+            with open(result_path + '/loss_' + str(i + 1), 'w') as f:
                 f.write('\n'.join([str(state_loss), str(next_state_loss)]))
 
     writer.close()
@@ -187,10 +196,13 @@ if __name__ == "__main__":
     parser.add_argument('--env', required=True, type=str, help='the environment used for training')
     parser.add_argument('--propor', default=3/4, type=float, help='the proportion of data used for training')
     parser.add_argument('--batch_size', default=128, type=int, help='batch size')
-    parser.add_argument('--lr', default=0.0001, type=float, help='the learning rate')
+    parser.add_argument('--lr', default=0.0005, type=float, help='the learning rate')
+    parser.add_argument('--decay', default=0.001, type=float, help='the L2 regularization')
     parser.add_argument('--lam', default=0.25, type=float, help='the weight of the consistency term')
     parser.add_argument('--num_iter', default=5000, type=int, help='the number of epoches')
     parser.add_argument('--iter_save', default=1000, type=int, help='save model and result after this number of iterations')
+    parser.add_argument('--log_dir', required=True, type=str, help='the directory to save training log')
+    parser.add_argument('--seed', required=True, type=int, help='seed number')
 
     args = parser.parse_args()
 
