@@ -8,21 +8,19 @@ import sys
 from normal import *
 from e2c_model import E2C
 from datasets import *
-import data.sample_planar_data as planar_sampler
-import data.sample_planar_data_2 as planar_sampler_2
-import data.sample_planar_partial as planar_sampler_partial
+import data.sample_planar as planar_sampler
 import data.sample_pendulum_data as pendulum_sampler
 import data.sample_cartpole_data as cartpole_sampler
 
 torch.set_default_dtype(torch.float64)
 
 device = torch.device("cuda")
-datasets = {'planar': PlanarDataset, 'pendulum': GymPendulumDatasetV2, 'planar2': PlanarDataset, 'planar_partial': PlanarDataset}
-settings = {'planar': (1600, 2, 2), 'planar2': (1600, 2, 2), 'planar_partial': (1600, 2, 2), 'pendulum': (4608, 3, 1)}
-samplers = {'planar': planar_sampler, 'pendulum': pendulum_sampler, 'cartpole': cartpole_sampler, 'planar2': planar_sampler_2, 'planar_partial': planar_sampler_partial}
+datasets = {'planar': PlanarDataset, 'pendulum': GymPendulumDatasetV2}
+settings = {'planar': (1600, 2, 2), 'pendulum': (4608, 3, 1)}
+samplers = {'planar': planar_sampler, 'pendulum': pendulum_sampler, 'cartpole': cartpole_sampler}
 num_eval = 10 # number of images evaluated on tensorboard
 
-# dataset = datasets['planar2']('./data/data/' + 'planar2')
+# dataset = datasets['planar']('./data/data/' + 'planar')
 # x, u, x_next = dataset[0]
 # imgplot = plt.imshow(x.squeeze(), cmap='gray')
 # plt.show()
@@ -130,7 +128,7 @@ def plot_preds(model, env, num_eval):
 
 def main(args):
     env_name = args.env
-    assert env_name in ['planar', 'planar2', 'planar_partial', 'pendulum']
+    assert env_name in ['planar', 'pendulum']
     propor = args.propor
     batch_size = args.batch_size
     lr = args.lr

@@ -4,14 +4,6 @@ from normal import NormalDistribution
 
 torch.set_default_dtype(torch.float64)
 
-# def is_layer(m):
-#     return isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d)
-#
-# def initialize(seq):
-#     for m in seq:
-#         if is_layer(m):
-#             torch.nn.init.orthogonal_(m.weight)
-
 def weights_init(m):
     if type(m) in [nn.Conv2d, nn.Linear, nn.ConvTranspose2d]:
         torch.nn.init.orthogonal_(m.weight)
@@ -183,9 +175,7 @@ class PendulumTransition(Transition):
         super(PendulumTransition, self).__init__(net, z_dim, u_dim)
 
 CONFIG = {
-    'planar2': (PlanarEncoder, PlanarDecoder, PlanarTransition),
     'planar': (PlanarEncoder, PlanarDecoder, PlanarTransition),
-    'planar_partial': (PlanarEncoder, PlanarDecoder, PlanarTransition),
     'pendulum': (PendulumEncoder, PendulumDecoder, PendulumTransition)
 }
 
