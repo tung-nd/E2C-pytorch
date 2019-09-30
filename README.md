@@ -1,6 +1,6 @@
 ## Embed to Control
 
-This is a pytorch implementation of the paper "Embed to Control: A Locally Linear Latent Dynamics Model for Control from Raw Images", NIPS, 2015.
+This is a pytorch implementation of the paper "[Embed to Control: A Locally Linear Latent Dynamics Model for Control from Raw Images](https://arxiv.org/abs/1506.07365)", NIPS, 2015.
 
 **Note: This is not and official implementation.**
 
